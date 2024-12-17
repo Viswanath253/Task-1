@@ -1,0 +1,47 @@
+# Import Libraries
+import os
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.chains import RetrievalQA
+from langchain.chat_models import ChatOpenAI
+
+# Task 1: Extract, Embed, and Query PDF Data
+def pdf_rag_pipeline(pdf_folder_path, openai_api_key):
+    # 1. Load PDFs and Extract Text
+    documents = []
+    for file in os.listdir(pdf_folder_path):
+        if file.endswith(".pdf"):
+            pdf_path = os.path.join(pdf_folder_path, file)
+            loader = PyPDFLoader(pdf_path)
+            documents.extend(loader.load())
+
+    # 2. Split Text into Chunks
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    chunks = text_splitter.split_documents(documents)
+
+    # 3. Convert Chunks into Embeddings
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+    vectorstore = FAISS.from_documents(chunks, embeddings)
+
+    # 4. Create a Retrieval Chain with OpenAI LLM
+    llm = ChatOpenAI(model="gpt-3.5-turbo", openai_api_key=openai_api_key)
+    retriever = vectorstore.as_retriever()
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+
+    # 5. Query Handling
+    def query_pdf(question):
+        return qa_chain.run(question)
+
+    return query_pdf
+
+# Example Usage
+if __name__ == "__main__":
+    OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+    PDF_FOLDER = "./pdfs"  # Folder containing PDFs
+
+    query_system = pdf_rag_pipeline(PDF_FOLDER, OPENAI_API_KEY)
+    question = "What is the unemployment information based on degree type on page 2?"
+    response = query_system(question)
+    print("Response:", response)
